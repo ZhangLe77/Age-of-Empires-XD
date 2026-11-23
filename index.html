@@ -410,11 +410,12 @@ function wxText0(){const r=rainOn(),f=frostOn();if(f&&FROZEN)return ['🧊 Eis',
  if(f)return ['❄ Schnee','Schnee: Landtruppen −12 % Tempo'+(ICE&&gameT<360?' · Frost ab Minute 6':'')];if(r)return ['🌧 Regen','Regen: Fußtruppen & Dorfbewohner −12 %, Reiter/Belagerung/Karren −18 % Tempo, Schiffe −8 % · Bogenschützen −1 Reichweite'];
  return [isNight()?'🌙 Nacht':'☀ Klar',isNight()?'Nacht: geringere Sichtweite':'Klares Wetter: keine Einschränkungen'];}
 function moveRes(r,nx,ny){const oi=r.ty*MW+r.tx,ni=ny*MW+nx;if(block[oi]===r.id)block[oi]=baseBlock(oi);if(resAt[oi]===r.id)resAt[oi]=0;
- const [px,py]=resXY(r);r.ox=px/TS;r.oy=py/TS;if(nx!==r.tx)r.flip=nx<r.tx;r.tx=nx;r.ty=ny;block[ni]=r.id;resAt[ni]=r.id;r.mv=performance.now();r.mvd=r.fast?260:520;r.fast=false;}
+ const [px,py]=resXY(r);r.ox=px/TS;r.oy=py/TS;if(nx!==r.tx)r.flip=nx<r.tx;r.tx=nx;r.ty=ny;if(!ANIMW[r.type])block[ni]=r.id;resAt[ni]=r.id;r.mv=performance.now();r.mvd=r.fast?260:520;r.fast=false;}
+const ANIMW={deer:1,boar:1,sheep:1,wolf:1};
 const ANIM={deer:{rad:4,gap:4},boar:{rad:3,gap:6},sheep:{rad:2,gap:5},wolf:{rad:4,gap:4},camp:{rad:0,gap:1e9}};let animT=0;
 let ABLK=null,ablkT=0;
 // Zonen um Gebäude (inkl. Farmen), die Tiere meiden – sie laufen nicht mehr über Felder oder in Basen
-function calcABLK(){if(!ABLK||ABLK.length!==MW*MH)ABLK=new Uint8Array(MW*MH);else ABLK.fill(0);for(const b of blds){if(b.dead||b.owner<0)continue;const m=b.type==='farm'?1:2;
+function calcABLK(){for(const r of ress){if(!r.dead&&ANIMW[r.type]){const i=r.ty*MW+r.tx;if(block[i]===r.id)block[i]=baseBlock(i);}}if(!ABLK||ABLK.length!==MW*MH)ABLK=new Uint8Array(MW*MH);else ABLK.fill(0);for(const b of blds){if(b.dead||b.owner<0)continue;const m=b.type==='farm'?1:2;
  for(let y=Math.max(0,b.ty-m);y<Math.min(MH,b.ty+b.h+m);y++)for(let x=Math.max(0,b.tx-m);x<Math.min(MW,b.tx+b.w+m);x++)ABLK[y*MW+x]=1;}}
 function animFree(i,x,y,esc){if(x<1||y<1||x>=MW-1||y>=MH-1)return false;if(block[i]!==0||terr[i]===1||resAt[i])return false;if(!esc&&ABLK&&ABLK[i])return false;let occ=false;forNear(x+0.5,y+0.5,1.1,v=>{if(!v.dead&&!v.inside&&!v.d.naval&&!v.d.air&&Math.hypot(v.x-x-0.5,v.y-y-0.5)<1.1)occ=true;});return !occ;}
 function animStep(r,score){let best=null,bs=-1e9;const esc=!!(ABLK&&ABLK[r.ty*MW+r.tx]);for(let k=0;k<8;k++){const x=r.tx+DX[k],y=r.ty+DY[k],i=y*MW+x;if(!animFree(i,x,y,esc))continue;if(DX[k]&&DY[k]&&terr[r.ty*MW+x]===1&&terr[y*MW+r.tx]===1)continue;const sc=score(x,y)+Math.random()*0.3;if(sc>bs){bs=sc;best=[x,y];}}
@@ -615,7 +616,7 @@ function mkPlayer(i,s){s=s||{};const col=s.col!=null?s.col:i,df=s.d!=null?s.d:1;
  name:COLN[col]+(s.k==='bot'?' (Computer, '+DIFFN[df]+')':''),res:{food:200,wood:200,gold:100,stone:200,oil:0},mk:{food:100,wood:100,stone:100,oil:100},age:0,techs:new Set(),researching:new Set(),pop:0,cap:0,training:0,stats:{gathered:0,trained:0,killed:0,lost:0,razed:0}};}
 function resetWorld(){ents=new Map();units=[];blds=[];ress=[];projs=[];effects=[];pings=[];nextId=1;block.fill(0);terr.fill(0);resAt.fill(0);gateOwn.fill(0);for(const a of visP)a.fill(0);for(const a of explP)a.fill(0);vis=visP[ME];expl=explP[ME];treeFloor.fill(0);sel=new Set();groups={};placing=null;cmdMode=null;wallDrag=null;buildPage=0;}
 
-function addRes(type,tx,ty){const d=RESDEF[type];const e={id:nextId++,kind:'res',type,d,tx,ty,w:1,h:1,amount:d.amt,max:d.amt,owner:-1,v:Math.floor(rnd()*3),hp:1,maxHp:1};ents.set(e.id,e);ress.push(e);const i=ty*MW+tx;if(type!=='relic'&&type!=='treasure')block[i]=e.id;resAt[i]=e.id;if(type==='tree')treeFloor[i]=1;return e;}
+function addRes(type,tx,ty){const d=RESDEF[type];const e={id:nextId++,kind:'res',type,d,tx,ty,w:1,h:1,amount:d.amt,max:d.amt,owner:-1,v:Math.floor(rnd()*3),hp:1,maxHp:1};ents.set(e.id,e);ress.push(e);const i=ty*MW+tx;if(type!=='relic'&&type!=='treasure'&&!ANIMW[type])block[i]=e.id;resAt[i]=e.id;if(type==='tree')treeFloor[i]=1;return e;}
 const baseBlock=i=>terr[i]===1?-1:terr[i]===3?-2:0;
 function addBld(type,owner,tx,ty,built){const d=BLD[type],P=players[owner];const mh=Math.round(d.hp*(P&&P.techs.has('maurerei')?1.2:1)*(P&&P.civ==='byzantiner'?1.1:1)*(P&&P.techs.has('befestigung')&&(d.wall||d.gate||type==='palisade')?1.6:1)),ff=P&&P.techs.has('fruchtwechsel')?400:250;
  const e={id:nextId++,kind:'bld',type,d,owner,tx,ty,w:d.w,h:d.h,hp:built?mh:1,maxHp:mh,built:!!built,prog:built?1:0,queue:[],qt:0,training:false,rally:null,cd:1,food:type==='farm'?ff:0,fmax:ff,farmer:0,seen:owner===ME,flash:0};
@@ -1715,7 +1716,7 @@ function dockFits(x,y,ex){const d=BLD.hafen;if(x<1||y<1||x+d.w>=MW-1||y+d.h>=MH-
  for(let ty=y;ty<y+d.h;ty++)for(let tx=x;tx<x+d.w;tx++){const i=ty*MW+tx;if(terr[i]!==1||block[i]!==-1||(ex&&!ex[i]))return false;}
  for(let ty=y-1;ty<=y+d.h;ty++)for(let tx=x-1;tx<=x+d.w;tx++){if(tx>=x&&tx<x+d.w&&ty>=y&&ty<y+d.h)continue;const i=ty*MW+tx;if(terr[i]!==1&&block[i]===0)return true;}return false;}
 function canPlaceAt(type,x,y,o){const d=BLD[type];if(x<0||y<0||x+d.w>MW||y+d.h>MH)return false;const ex=explP[o];if(d.dock)return dockFits(x,y,ex);
- for(let ty=y;ty<y+d.h;ty++)for(let tx=x;tx<x+d.w;tx++){const i=ty*MW+tx;if(block[i]!==0||!ex[i])return false;}
+ for(let ty=y;ty<y+d.h;ty++)for(let tx=x;tx<x+d.w;tx++){const i=ty*MW+tx;if(block[i]!==0||!ex[i])return false;if(resAt[i]){const ra=ents.get(resAt[i]);if(ra&&ANIMW[ra.type])return false;}}
  for(const b of blds)if(!b.dead&&b.d.walk&&b.tx<x+d.w&&b.tx+b.w>x&&b.ty<y+d.h&&b.ty+b.h>y)return false;
  return true;}
 let wallDrag=null;
