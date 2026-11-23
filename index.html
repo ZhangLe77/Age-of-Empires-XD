@@ -412,8 +412,12 @@ function wxText0(){const r=rainOn(),f=frostOn();if(f&&FROZEN)return ['🧊 Eis',
 function moveRes(r,nx,ny){const oi=r.ty*MW+r.tx,ni=ny*MW+nx;if(block[oi]===r.id)block[oi]=baseBlock(oi);if(resAt[oi]===r.id)resAt[oi]=0;
  const [px,py]=resXY(r);r.ox=px/TS;r.oy=py/TS;if(nx!==r.tx)r.flip=nx<r.tx;r.tx=nx;r.ty=ny;block[ni]=r.id;resAt[ni]=r.id;r.mv=performance.now();r.mvd=r.fast?260:520;r.fast=false;}
 const ANIM={deer:{rad:4,gap:4},boar:{rad:3,gap:6},sheep:{rad:2,gap:5},wolf:{rad:4,gap:4},camp:{rad:0,gap:1e9}};let animT=0;
-function animFree(i,x,y){if(x<1||y<1||x>=MW-1||y>=MH-1)return false;if(block[i]!==0||terr[i]===1||resAt[i])return false;let occ=false;forNear(x+0.5,y+0.5,0.8,v=>{if(!v.dead&&!v.inside&&!v.d.naval&&Math.hypot(v.x-x-0.5,v.y-y-0.5)<0.8)occ=true;});return !occ;}
-function animStep(r,score){let best=null,bs=-1e9;for(let k=0;k<8;k++){const x=r.tx+DX[k],y=r.ty+DY[k],i=y*MW+x;if(!animFree(i,x,y))continue;if(DX[k]&&DY[k]&&terr[r.ty*MW+x]===1&&terr[y*MW+r.tx]===1)continue;const sc=score(x,y)+Math.random()*0.3;if(sc>bs){bs=sc;best=[x,y];}}
+let ABLK=null,ablkT=0;
+// Zonen um Gebäude (inkl. Farmen), die Tiere meiden – sie laufen nicht mehr über Felder oder in Basen
+function calcABLK(){if(!ABLK||ABLK.length!==MW*MH)ABLK=new Uint8Array(MW*MH);else ABLK.fill(0);for(const b of blds){if(b.dead||b.owner<0)continue;const m=b.type==='farm'?1:2;
+ for(let y=Math.max(0,b.ty-m);y<Math.min(MH,b.ty+b.h+m);y++)for(let x=Math.max(0,b.tx-m);x<Math.min(MW,b.tx+b.w+m);x++)ABLK[y*MW+x]=1;}}
+function animFree(i,x,y,esc){if(x<1||y<1||x>=MW-1||y>=MH-1)return false;if(block[i]!==0||terr[i]===1||resAt[i])return false;if(!esc&&ABLK&&ABLK[i])return false;let occ=false;forNear(x+0.5,y+0.5,1.1,v=>{if(!v.dead&&!v.inside&&!v.d.naval&&!v.d.air&&Math.hypot(v.x-x-0.5,v.y-y-0.5)<1.1)occ=true;});return !occ;}
+function animStep(r,score){let best=null,bs=-1e9;const esc=!!(ABLK&&ABLK[r.ty*MW+r.tx]);for(let k=0;k<8;k++){const x=r.tx+DX[k],y=r.ty+DY[k],i=y*MW+x;if(!animFree(i,x,y,esc))continue;if(DX[k]&&DY[k]&&terr[r.ty*MW+x]===1&&terr[y*MW+r.tx]===1)continue;const sc=score(x,y)+Math.random()*0.3;if(sc>bs){bs=sc;best=[x,y];}}
  if(best){moveRes(r,best[0],best[1]);if(MODE==='host')NET.resDirty.add(r.id);return true;}return false;}
 function nearVictim(r,rad){let v=null,bd=rad;forNear(r.tx+0.5,r.ty+0.5,rad,u=>{if(u.dead||u.inside||u.d.naval)return;const d=Math.hypot(u.x-r.tx-0.5,u.y-r.ty-0.5);if(d<bd){bd=d;v=u;}});return v;}
 function neutralHit(v,atk,pierce,r){const P=players[v.owner];let arm=pierce?v.d.arm[1]:v.d.arm[0];if(P&&v.type!=='vil'&&P.techs.has('ruestung'))arm++;const d=Math.max(1,atk-arm);v.hp-=d;v.flash=0.15;
@@ -432,7 +436,7 @@ function placeCamps(cfg){if(TUT)return;const np=cfg.slots.length,far=(x,y,m)=>BA
  const free=(x,y,r)=>{for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){const xx=x+dx,yy=y+dy;if(xx<2||yy<2||xx>=MW-2||yy>=MH-2)return false;const i=yy*MW+xx;if(block[i]!==0||resAt[i]||terr[i]!==0)return false;}return true;};
  const nc=np>2?3:2;for(let k=0;k<400&&camps.length<nc;k++){const x=2+Math.floor(rnd()*(MW-4)),y=2+Math.floor(rnd()*(MH-4));if(!free(x,y,2)||!far(x,y,MW>100?26:22)||camps.some(c=>Math.hypot(c[0]-x,c[1]-y)<18))continue;camps.push([x,y]);addRes('camp',x,y);addRes('treasure',x+1,y+1);if(rnd()<0.5)addRes('treasure',x-1,y+1);}
  const nw=np+1;let packs=0;for(let k=0;k<400&&packs<nw;k++){const x=2+Math.floor(rnd()*(MW-4)),y=2+Math.floor(rnd()*(MH-4));if(!free(x,y,1)||!far(x,y,20))continue;addRes('wolf',x,y);addRes('wolf',x+1,y);packs++;}}
-function animTick(dt){animT-=dt;if(animT>0)return;animT=0.25;const tg=new Set();for(const u of units)if(u.target&&u.target.kind==='res')tg.add(u.target.id);
+function animTick(dt){animT-=dt;if(animT>0)return;animT=0.25;if((ablkT-=0.25)<=0){ablkT=2;calcABLK();}const tg=new Set();for(const u of units)if(u.target&&u.target.kind==='res')tg.add(u.target.id);
  for(const r of ress){if(r.dead||r.away)continue;const A=ANIM[r.type];if(!A)continue;if(r.hx==null){r.hx=r.tx;r.hy=r.ty;r.nm=gameT+1+Math.random()*A.gap*2;}
   if(r.type==='camp'){if(gameT>=(r.sh||0)){const v=nearVictim(r,5.5);if(v){r.sh=gameT+1.8;const sx=r.tx+0.5,sy=r.ty+0.2;projs.push({x:sx,y:sy,sx,sy,t:v,tx:v.x,ty:v.y,p:0,visual:true,kind:0});if(MODE==='host'&&NET.shotQ.length<60)NET.shotQ.push([+sx.toFixed(2),+sy.toFixed(2),v.id,0]);neutralHit(v,7,true,r);}else r.sh=gameT+0.5;}continue;}
   if(r.type==='wolf'){const hd=Math.hypot(r.tx-r.hx,r.ty-r.hy);if(hd>9)r.ret=true;if(r.ret&&hd<2)r.ret=false;
@@ -442,6 +446,7 @@ function animTick(dt){animT-=dt;if(animT>0)return;animT=0.25;const tg=new Set();
   if(r.type==='boar'&&r.amount<r.max){if(!r.rg){r.rg=gameT+10;r.rh=0;}if(gameT<r.rg&&gameT>=r.rh){r.rh=gameT+1.5;let v=null,bd=1.8;forNear(r.tx+0.5,r.ty+0.5,1.8,u=>{if(u.dead||u.inside||u.d.naval)return;const d=Math.hypot(u.x-r.tx-0.5,u.y-r.ty-0.5);if(d<bd){bd=d;v=u;}});
     if(v){r.flip=v.x<r.tx+0.5;if(!r.warned){r.warned=1;notify(v.owner,'Das Wildschwein wehrt sich! Jage es besser mit mehreren Dorfbewohnern.','warn','hit',v.x,v.y);}}}continue;}
   if(r.amount<r.max||tg.has(r.id))continue;
+  if(r.type!=='wolf'&&ABLK&&ABLK[r.ty*MW+r.tx]){if(gameT>=(r.fl||0)){r.fl=gameT+0.8;animStep(r,(x,y)=>ABLK[y*MW+x]?-1-Math.random():1);if(!ABLK[r.ty*MW+r.tx]){r.hx=r.tx;r.hy=r.ty;}}continue;}
   if(r.type==='deer'){let th=null;forNear(r.tx+0.5,r.ty+0.5,3.2,v=>{if(!th&&!v.dead&&!v.inside&&v.type!=='vil'&&!v.d.naval&&!v.d.trade&&!v.d.monk&&Math.hypot(v.x-r.tx-0.5,v.y-r.ty-0.5)<3.2)th=v;});
    if(th){if(gameT>=(r.fl||0)){r.fl=gameT+0.5;r.fast=true;if(animStep(r,(x,y)=>Math.hypot(x+0.5-th.x,y+0.5-th.y))){r.hx=r.tx;r.hy=r.ty;}}continue;}}
   if(gameT>=r.nm){r.nm=gameT+A.gap+Math.random()*A.gap*1.5;animStep(r,(x,y)=>Math.hypot(x-r.hx,y-r.hy)<=A.rad?0:-5);}}}
@@ -805,7 +810,7 @@ function losClear(ax,ay,bx,by){const d=Math.hypot(bx-ax,by-ay),n=Math.ceil(d*3);
 function smooth(sx,sy,pts){const out=[];let ax=sx,ay=sy,i=0;while(i<pts.length){let j=i;for(let k=Math.min(pts.length-1,i+14);k>i;k--){if(losClear(ax,ay,pts[k].x,pts[k].y)){j=k;break;}}out.push(pts[j]);ax=pts[j].x;ay=pts[j].y;i=j+1;}return out;}
 function pathToEnt(u,t,inside){if(u.d.air){u.path=[{x:cxE(t),y:cyE(t)}];return;}curOwner=u.owner;curNaval=!!u.d.naval;let g;if(t.kind==='unit'){const x=Math.floor(t.x),y=Math.floor(t.y);g={x0:x,y0:y,x1:x,y1:y,adj:true};}else g={x0:t.tx,y0:t.ty,x1:t.tx+t.w-1,y1:t.ty+t.h-1,adj:!inside};
  u.path=smooth(u.x,u.y,findPath(Math.floor(u.x),Math.floor(u.y),g,6000));}
-function pathToPoint(u,x,y){if(u.d.air){u.path=[{x:clamp(x,0.3,MW-0.3),y:clamp(y,0.3,MH-0.3)}];return;}curOwner=u.owner;curNaval=!!u.d.naval;x=clamp(x,0.3,MW-0.3);y=clamp(y,0.3,MH-0.3);const tx=Math.floor(x),ty=Math.floor(y),ok=pf(x,y);
+function pathToPoint(u,x,y){u.mdest={x,y};if(u.d.air){u.path=[{x:clamp(x,0.3,MW-0.3),y:clamp(y,0.3,MH-0.3)}];return;}curOwner=u.owner;curNaval=!!u.d.naval;x=clamp(x,0.3,MW-0.3);y=clamp(y,0.3,MH-0.3);const tx=Math.floor(x),ty=Math.floor(y),ok=pf(x,y);
  const pts=findPath(Math.floor(u.x),Math.floor(u.y),{x0:tx,y0:ty,x1:tx,y1:ty,adj:!ok},N);
  if(ok&&pts.reached)pts.push({x,y});u.path=smooth(u.x,u.y,pts);}
 
@@ -841,7 +846,7 @@ function approach(u,t,dt,reached,inside){
 function clearFarm(u){const t=u.target;if(t&&t.kind==='bld'&&t.type==='farm'&&t.farmer===u.id)t.farmer=0;}
 function farmFree(f,u){if(!f.farmer||f.farmer===u.id)return true;const o=ents.get(f.farmer);return !o||o.target!==f||(o.state!=='gather'&&o.state!=='return');}
 const resKindOf=t=>t.kind==='bld'?'food':t.d.kind;
-function orderMove(u,x,y,am,keep){if(!keep){u.pat=null;u.wp=null;}clearFarm(u);u.target=null;u.pathFor=0;u.state=am?'amove':'move';u.amove=am?{x,y}:null;pathToPoint(u,x,y);}
+function orderMove(u,x,y,am,keep){u.bestD=null;u.stuckT=0;if(!keep){u.pat=null;u.wp=null;}clearFarm(u);u.target=null;u.pathFor=0;u.state=am?'amove':'move';u.amove=am?{x,y}:null;pathToPoint(u,x,y);}
 function orderGather(u,t){if(t.kind==='res'&&t.d.kind==='oil'&&players[u.owner].age<4){notify(u.owner,'Öl kann erst ab dem Industriezeitalter gefördert werden.','warn','err');return;}if(u.target!==t)clearFarm(u);u.state='gather';u.target=t;u.gatherKind=resKindOf(t);u.path=null;u.pathFor=0;u.amove=null;if(t.kind==='bld')t.farmer=u.id;}
 function orderBuild(u,b){if((u.state==='gather'||u.state==='return')&&u.target)u.resume=u.target;clearFarm(u);u.state='build';u.target=b;u.path=null;u.pathFor=0;u.amove=null;}
 function setAttack(u,t){if(u.d.monk||u.d.fisher||u.d.transport||u.d.trade||t.inside)return false;if(t.d&&t.d.air&&!u.d.range&&!u.d.air)return false;if(!u.d.naval&&!u.d.range&&t.d&&t.d.naval)return false;if(u.d.onlyBld&&t.kind!=='bld')return false;clearFarm(u);u.state='attack';u.target=t;u.path=null;u.pathFor=0;return true;}
@@ -901,7 +906,7 @@ function updUnit(u,dt){
   case 'enter':doEnter(u,dt);break;
   case 'trade':doTrade(u,dt);break;
   case 'unload':if(!u.path||!u.path.length){const n=ejectAll(u,u.x,u.y);if(u.cargo&&u.cargo.length&&!n)notify(u.owner,'Hier kann nicht ausgeladen werden – näher ans Ufer fahren.','warn');u.state='idle';u.unl=null;}else moveAlong(u,dt);break;
-  case 'move':if(!u.path||!u.path.length){if(u.wp&&u.wp.length){const w=u.wp.shift();orderMove(u,w.x,w.y,w.am,true);}else u.state='idle';}else moveAlong(u,dt);break;
+  case 'move':if(u.path&&u.path.length){const l=u.path[u.path.length-1],dd=Math.hypot(l.x-u.x,l.y-u.y);if(u.bestD==null||dd<u.bestD-0.05){u.bestD=dd;u.stuckT=0;}else if(dd<2.6&&(u.stuckT=(u.stuckT||0)+dt)>0.6){u.path=null;}}if(!u.path||!u.path.length){u.bestD=null;u.stuckT=0;if(u.wp&&u.wp.length){const w=u.wp.shift();orderMove(u,w.x,w.y,w.am,true);}else u.state='idle';}else moveAlong(u,dt);break;
   case 'amove':if(u.scan<=0){u.scan=0.4;const t=acquire(u,u.d.los+0.5);if(t){u.state='attack';u.target=t;u.path=null;u.pathFor=0;break;}}
    if(!u.path||!u.path.length){if(u.pat){const p=u.pat;p.d^=1;orderMove(u,p.d?p.bx:p.ax,p.d?p.by:p.ay,true,true);}else if(u.wp&&u.wp.length){const w=u.wp.shift();orderMove(u,w.x,w.y,w.am,true);}else{u.state='idle';u.amove=null;}}else moveAlong(u,dt);break;
   case 'attack':doAttack(u,dt);break;
@@ -1266,12 +1271,19 @@ function step(dt){gameT+=dt;buildGrid();
  vicT-=dt;if(vicT<=0){vicT=1;checkDefeats();}}
 function separate(){
  for(const u of units){if(u.dead)continue;
-  forNear(u.x,u.y,1.2,v=>{if(v.id<=u.id||v.dead||!!v.d.air!==!!u.d.air)return;let dx=v.x-u.x,dy=v.y-u.y,d2=dx*dx+dy*dy;const min=(u.d.r+v.d.r)*0.85;if(d2>=min*min)return;
+  const sr=Math.max(1.2,u.d.r*2);forNear(u.x,u.y,sr,v=>{if(v.id<=u.id||v.dead||!!v.d.air!==!!u.d.air)return;let dx=v.x-u.x,dy=v.y-u.y,d2=dx*dx+dy*dy;
+   const fr=v.owner===u.owner||allied(v.owner,u.owner),mv=u.moving||v.moving;
+   // Eigene/verbündete Einheiten drängeln sich weich aneinander vorbei, Arbeiter lassen Durchgehende fast durch
+   let k=0.85,pw=0.6;if(fr){if(mv){k=(u.working||v.working)?0.4:0.55;pw=0.3;}else{k=0.75;pw=0.4;}}
+   const min=(u.d.r+v.d.r)*k;if(d2>=min*min)return;
    let d=Math.sqrt(d2);if(d<0.001){dx=Math.random()-0.5;dy=Math.random()-0.5;d=Math.hypot(dx,dy);}const ov=min-d,nx=dx/d,ny=dy/d;
    const wu=u.working?0.15:u.moving?0.6:1,wv=v.working?0.15:v.moving?0.6:1,s=wu+wv;
-   u.x-=nx*ov*(wu/s)*0.6;u.y-=ny*ov*(wu/s)*0.6;v.x+=nx*ov*(wv/s)*0.6;v.y+=ny*ov*(wv/s)*0.6;});}
+   u.x-=nx*ov*(wu/s)*pw;u.y-=ny*ov*(wu/s)*pw;v.x+=nx*ov*(wv/s)*pw;v.y+=ny*ov*(wv/s)*pw;});}
  for(const u of units){if(u.dead)continue;u.x=clamp(u.x,0.2,MW-0.2);u.y=clamp(u.y,0.2,MH-0.2);if(u.d.air)continue;curOwner=u.owner;curNaval=!!u.d.naval;
-  if(!pf(u.x,u.y)){if(pf(u.x,u.py))u.y=u.py;else if(pf(u.px,u.y))u.x=u.px;else if(pf(u.px,u.py)){u.x=u.px;u.y=u.py;}else nudge(u);}}}
+  if(!pf(u.x,u.y)){const bi=Math.floor(u.y)*MW+Math.floor(u.x),be=block[bi]>0?ents.get(block[bi]):null;
+   // Ein Tier ist in den Weg gelaufen: Weg neu berechnen statt hängen zu bleiben
+   if(be&&be.kind==='res'&&ANIM[be.type]&&u.path&&u.path.length&&!u.working){if((u.state==='move'||u.amove)&&u.mdest)pathToPoint(u,u.mdest.x,u.mdest.y);else{u.path=null;u.repath=0;}}
+   if(pf(u.x,u.py))u.y=u.py;else if(pf(u.px,u.y))u.x=u.px;else if(pf(u.px,u.py)){u.x=u.px;u.y=u.py;}else nudge(u);}}}
 function nudge(u){const sx=Math.floor(u.x),sy=Math.floor(u.y);for(let r=1;r<8;r++){let best=null,bd=1e9;for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;const x=sx+dx,y=sy+dy;if(!pf(x+0.5,y+0.5))continue;const d=Math.hypot(x+0.5-u.x,y+0.5-u.y);if(d<bd){bd=d;best=[x+0.5,y+0.5];}}if(best){u.x=best[0];u.y=best[1];u.path=null;return;}}}
 
 // ================== Meldungen & Ton ==================
