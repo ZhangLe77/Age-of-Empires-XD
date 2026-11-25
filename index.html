@@ -73,11 +73,12 @@ html,body{margin:0;height:100%;background:#0d0a07;overflow:hidden;font-family:'A
 #tooltip b{color:var(--gold);font-size:15px}
 #tooltip .why{color:#ff8f7a;font-weight:700}
 #tooltip .cost{margin:3px 0;font-weight:700}
-#msgs{position:absolute;left:184px;bottom:194px;display:flex;flex-direction:column-reverse;gap:4px;z-index:5;pointer-events:none}
+body:has(#chatIn:not(.hidden)) #msgs{bottom:54px}
+#msgs{position:absolute;left:8px;bottom:10px;max-width:min(430px,42vw);display:flex;flex-direction:column-reverse;align-items:flex-start;gap:3px;z-index:5;pointer-events:none}
 .msg.kat{color:#ffd0a0!important;border-left-color:#ff6a30!important;font-weight:700}
 .msg.quip{font-style:italic;color:#eadcff!important;border-left-color:#b48cff!important}
 .msg.team{border-left-color:#7dd3ff!important;color:#cfeeff}
-.msg{background:#1b130cdd;border-left:3px solid var(--gold);padding:5px 10px;border-radius:3px;font-weight:700;font-size:14px;transition:opacity .6s}
+.msg{background:#1b130cb3;border-left:3px solid var(--gold);padding:2px 8px;border-radius:3px;font-weight:600;font-size:12.5px;line-height:1.3;transition:opacity .6s;text-shadow:0 1px 2px #000}
 .msg.warn{border-color:#e74c3c;color:#ffb3a7}
 .msg.good{border-color:#6fcf6f}
 .overlay{position:fixed;inset:0;background:radial-gradient(ellipse at center,#2a1d10ee,#070503f8);display:flex;align-items:center;justify-content:center;z-index:20}
@@ -123,7 +124,7 @@ html,body{margin:0;height:100%;background:#0d0a07;overflow:hidden;font-family:'A
 .prow .qp{display:inline-block;width:40px;height:4px;background:#000;vertical-align:middle}.prow .qp b{display:block;height:100%;background:var(--gold)}
 .drow{display:grid;grid-template-columns:auto auto;gap:4px 10px;align-items:center;margin:6px 0;padding-bottom:6px;border-bottom:1px solid #6b5033}
 .drow button,.drow select{font:700 12px 'Alegreya Sans',sans-serif;background:#4a3622;color:#f1e4c3;border:1px solid #a17c4c;border-radius:3px;padding:2px 6px;cursor:pointer}
-#chatIn{position:absolute;left:184px;bottom:12px;width:min(420px,60%);font:600 15px 'Alegreya Sans',sans-serif;padding:7px 10px;border-radius:5px;border:2px solid #a17c4c;background:#1b130cee;color:#f1e4c3;z-index:6}
+#chatIn{position:absolute;left:8px;bottom:10px;width:min(420px,60%);font:600 15px 'Alegreya Sans',sans-serif;padding:7px 10px;border-radius:5px;border:2px solid #a17c4c;background:#1b130cee;color:#f1e4c3;z-index:6}
 #wonderTag{position:absolute;top:12px;left:50%;transform:translateX(-50%);background:#3a1a00dd;border:1px solid #e8c46a;padding:5px 16px;border-radius:5px;font-weight:800;color:#ffe27a;z-index:4;margin-top:34px}
 .mu i b{display:block;height:100%;background:#5c5}
 .warnt{color:#ff8f7a;font-weight:800}
@@ -170,6 +171,7 @@ html,body{margin:0;height:100%;background:#0d0a07;overflow:hidden;font-family:'A
     <button class="tb" id="idleBtn" title="Untätige Dorfbewohner (Taste .)">💤 0</button>
     <button class="tb" id="speedBtn" title="Spielgeschwindigkeit">⏩ 1×</button>
     <button class="tb" id="pauseBtn" title="Pause (P)">⏸</button>
+    <button class="tb" id="msgBtn" title="Meldungen">💬</button>
     <button class="tb" id="muteBtn" title="Ton an/aus">🔊</button>
     <button class="tb" id="ttBtn" title="Technologiebaum & Konter (F2)">📜</button>
     <button class="tb" id="saveBtn" title="Speichern / Laden">💾</button>
@@ -1288,8 +1290,14 @@ function separate(){
 function nudge(u){const sx=Math.floor(u.x),sy=Math.floor(u.y);for(let r=1;r<8;r++){let best=null,bd=1e9;for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){if(Math.max(Math.abs(dx),Math.abs(dy))!==r)continue;const x=sx+dx,y=sy+dy;if(!pf(x+0.5,y+0.5))continue;const d=Math.hypot(x+0.5-u.x,y+0.5-u.y);if(d<bd){bd=d;best=[x+0.5,y+0.5];}}if(best){u.x=best[0];u.y=best[1];u.path=null;return;}}}
 
 // ================== Meldungen & Ton ==================
-function msg(t,cls){const el=document.createElement('div');el.className='msg '+(cls||'');el.textContent=t;const box=$('msgs');box.prepend(el);while(box.children.length>5)box.lastChild.remove();
- setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),700);},6500);}
+let MSGMODE='alle';try{MSGMODE=localStorage.getItem('zdr_msgmode')||'alle';}catch(e){}
+const MSGLOG=[];
+function msg(t,cls){cls=cls||'';MSGLOG.push(t);if(MSGLOG.length>60)MSGLOG.shift();
+ const imp=/warn|kat|chat|team/.test(cls),chat=/chat|team/.test(cls);
+ if(MSGMODE==='aus'&&!chat)return;if(MSGMODE==='wichtig'&&!imp)return;
+ const el=document.createElement('div');el.className='msg '+cls;el.textContent=t;const box=$('msgs');box.prepend(el);while(box.children.length>4)box.lastChild.remove();
+ setTimeout(()=>{el.style.opacity='0';setTimeout(()=>el.remove(),700);},chat?9000:imp?6500:4500);}
+function setMsgMode(m){MSGMODE=m;try{localStorage.setItem('zdr_msgmode',m);}catch(e){}const b=$('msgBtn');if(b){b.textContent=m==='alle'?'💬':m==='wichtig'?'💬!':'💬✕';b.title='Meldungen: '+(m==='alle'?'alle':m==='wichtig'?'nur wichtige (Angriffe, Katastrophen, Chat)':'nur Chat')+' – klicken zum Wechseln';}if(m!=='alle')for(const el of [...$('msgs').children])if(!/warn|kat|chat|team/.test(el.className)||(m==='aus'&&!/chat|team/.test(el.className)))el.remove();}
 let lastAlert=[-99,-99,-99,-99],alertPos=null;
 function alertAttack(t){const o=t.owner;if(gameT-lastAlert[o]<14)return;lastAlert[o]=gameT;notify(o,'Wir werden angegriffen! (Leertaste = hinspringen)','warn','alert',cxE(t),cyE(t));}
 function notify(o,text,cls,sound,x,y){if(o===ME){if(text)msg(text,cls);if(sound)snd(sound);if(x!=null){alertPos={x,y};pings.push({x,y,t:0});}}
@@ -2343,6 +2351,7 @@ $('helpBtn').addEventListener('click',toggleHelp);$('helpClose').addEventListene
 $('pauseBtn').addEventListener('click',togglePause);
 $('speedBtn').addEventListener('click',()=>{if(MODE==='guest')return;speed=speed===1?1.5:speed===1.5?2:1;$('speedBtn').textContent='⏩ '+speed+'×';});
 $('muteBtn').addEventListener('click',()=>{muted=!muted;$('muteBtn').textContent=muted?'🔇':'🔊';});
+$('msgBtn').addEventListener('click',()=>setMsgMode(MSGMODE==='alle'?'wichtig':MSGMODE==='wichtig'?'aus':'alle'));setMsgMode(MSGMODE);
 $('idleBtn').addEventListener('click',cycleIdle);
 function idleMil(){return units.filter(u=>!u.dead&&!u.inside&&u.owner===ME&&u.type!=='vil'&&!u.d.fisher&&!u.d.trade&&!u.d.transport&&!u.d.king&&u.state==='idle');}
 let idleMilIdx=0;function cycleIdleMil(){const l=idleMil();if(!l.length)return;idleMilIdx=(idleMilIdx+1)%l.length;const u=l[idleMilIdx];sel=new Set([u.id]);centerOn(u.x,u.y);uiSig='';snd('sel');}
