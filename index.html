@@ -2065,7 +2065,10 @@ NET.tSend-=dt;if(NET.tSend<=0){NET.tSend=0.5;const cs=[];let len=0;for(const p o
  if(running&&!NET.lost&&performance.now()-NET.lastIn>9000){NET.lost=true;msg('Verbindung zum Gastgeber verloren …','warn');$('netTag').textContent='⚠ Keine Verbindung';$('netTag').classList.remove('hidden');}}
 function maxHpOf(type,o){const d=UNITS[type];let h=d.hp;const P=players[o];if(!P)return h;if(P.civ==='franken'&&d.cls==='cav')h=Math.round(h*1.2);if(P.civ==='wikinger'&&d.cls==='inf')h=Math.round(h*1.15);if(P.civ==='sarazenen'&&d.camel)h+=15;if(type==='vil'&&P.techs.has('webstuhl'))h+=15;if(type==='moench'&&P.techs.has('heiligkeit'))h+=15;return h;}
 function gotHost(){NET.lastIn=performance.now();if(NET.lost){NET.lost=false;$('netTag').textContent='🌐 Gast · Code '+NET.code;}}
-function gRecvU(d){if(MODE!=='guest'||!d||typeof d.d!=='string')return;gotHost();if(NET.curU&&d.f<NET.curU.f)return;if(!NET.curU||d.f>NET.curU.f)NET.curU={f:d.f,got:new Set()};NET.curU.got.add(d.c);
+function gRecvU(d){if(MODE!=='guest'||!d||typeof d.d!=='string')return;gotHost();if(NET.curU&&d.f<NET.curU.f)return;if(!NET.curU||d.f>NET.curU.f){NET.curU={f:d.f,got:new Set()};
+  // Fallback: Einheiten, die in mehreren Frames nicht mehr kamen (verlorene/vertauschte Pakete), sind tot
+  let rm=false;for(const u of units){if(u.dead)continue;if(u.sf==null){u.sf=d.f;continue;}if(u.sf<d.f-6){u.dead=true;rm=true;ents.delete(u.id);sel.delete(u.id);effects.push({k:'corpse',x:u.x,y:u.y,owner:u.owner,type:u.type,t:0,face:u.face});}}if(rm)units=units.filter(u=>!u.dead);}
+ NET.curU.got.add(d.c);
  const buf=unb64(d.d),dv=new DataView(buf.buffer);const tg=[];
  for(let o=0;o+19<=buf.length;o+=19){const id=dv.getUint32(o,true),x=dv.getUint16(o+4,true)/512,y=dv.getUint16(o+6,true)/512,hp=dv.getUint16(o+8,true),to=buf[o+10],type=UT[to>>2],owner=to&3;if(!type||!players[owner])continue;
   let u=ents.get(id);if(!u||u.kind!=='unit'){u={id,kind:'unit',type,d:UNITS[type],owner,x,y,nx:x,ny:y,hp,maxHp:hp,state:'idle',target:null,carry:{t:null,a:0},face:0,anim:0,swing:0,flash:0,gatherKind:null,faith:100,channel:0,moving:false,working:false};ents.set(id,u);units.push(u);}
